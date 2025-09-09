@@ -51,12 +51,19 @@ Notes
 - All geometry & path logic is decoupled from rendering for easier testing.
 - Further improvements could include unit tests, polygon validation (self‑intersection), and optional clipping of the funnel path.
 
-Library / Integration Usage
----------------------------
+Install (npm)
+---------
+
+Using npm:
+
+```bash
+npm install path-of-least-regret
+```
 
 You can import a lightweight API (no UI / canvas demo) via `lib/api.js`:
 
 Example (ES module):
+---------
 
 ```js
 import { buildNavMesh, findPath, pathfind, V } from './lib/api.js';
