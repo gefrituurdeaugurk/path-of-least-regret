@@ -6,6 +6,7 @@ This library and demo showcases simple polygon editing, triangulation, A* across
 Structure
 ---------
 
+```text
 lib/                – Reusable library (no UI)
  math.js            – Vector & geometry primitives
  triangulate.js     – Ear‑clipping polygon triangulation
@@ -22,6 +23,7 @@ demo/               – Browser demo UI (editing + visualization)
 
 index.html          – Loads demo/main.js
 styles.css          – UI / layout styles
+```
 
 How to run
 ----------
@@ -118,4 +120,4 @@ Pixels in canvas-style Y-down layout. You can adapt by flipping Y if needed.
 License
 -------
 
-MIT (see LICENSE) – retain attribution per added clause.
+See LICENSE file
