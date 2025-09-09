@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>NavMesh Pathfinding Demo</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+
+<body>
+  <div class="wrap">
+    <canvas id="scene" width="1280" height="720"></canvas>
+    <div class="panel">
+      <button id="editBtn">Edit mode</button>
+      <button id="playBtn" class="secondary">Play mode</button>
+      <button id="resetBtn" class="secondary">Reset shape</button>
+      <span class="pill">Edit: click to add points, click first point to close, drag points, Backspace remove, '='
+        splits edge</span>
+      <label><input type="checkbox" id="toggleMesh" checked> Show navmesh</label>
+      <label><input type="checkbox" id="togglePortals"> Show portals</label>
+      <label><input type="checkbox" id="toggleWaypoints" checked> Show waypoints</label>
+  <label><input type="checkbox" id="optSmooth" checked> Smooth</label>
+  <label>Smooth iters <input type="number" id="optSmoothIter" min="1" max="5" value="1" class="num"></label>
+  <label><input type="checkbox" id="optDebug" checked> Debug data</label>
+      <button id="randomBtn">Random target</button>
+      <span class="pill">A* on triangles + Robust Funnel</span>
+    </div>
+    <div id="error" class="error"></div>
+    <div class="hint" id="hint"></div>
+  </div>
+
+  <script type="module" src="demo/main.js"></script>
+</body>
+
+</html>
