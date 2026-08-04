@@ -60,7 +60,8 @@ const { pathfind } = require('path-of-least-regret');
 API
 ---
 
-### `buildNavMesh(polygon, opts?) → Mesh`
+buildNavMesh(polygon, opts?) → Mesh
+-----------------------------------
 
 Validates and triangulates `polygon`, then builds the triangle adjacency graph.
 
@@ -78,7 +79,8 @@ Returns `{ polygon, tris, adj, centroids }`:
 
 With `includeDebug: true` a `debug: { tris, adj }` field is added.
 
-### `findPath(mesh, start, end, opts?) → PathResult`
+findPath(mesh, start, end, opts?) → PathResult
+----------------------------------------------
 
 Returns `{ ok: true, path, triPath, portals }`:
 
@@ -90,18 +92,21 @@ Returns `{ ok: true, path, triPath, portals }`:
 
 `triPath` and `portals` are always returned; there is no need to opt in.
 
-### `pathfind(polygon, start, end, opts?) → PathResult`
+pathfind(polygon, start, end, opts?) → PathResult
+--------------------------------------------------
 
 Convenience wrapper: builds a mesh and paths through it in one call. Accepts every option
 of both. Rebuilds the mesh on every call, so prefer `buildNavMesh` + `findPath` in a loop.
 
-### `updatePolygon(mesh, newPoly, opts?) → { changed, mesh, error? }`
+updatePolygon(mesh, newPoly, opts?) → { changed, mesh, error? }
+-----------------------------------------------------------------
 
 Rebuilds `mesh` **in place** only when `newPoly` differs from its current polygon — useful
 when a polygon editor fires on every mouse move. If the new polygon is rejected in
 `errorMode: 'code'`, the mesh is left untouched and the failure comes back as `error`.
 
-### Options
+Options
+-------
 
 | Option | Type | Default | Applies to |
 | --- | --- | --- | --- |
@@ -119,7 +124,8 @@ when a polygon editor fires on every mouse move. If the new polygon is rejected 
   far inward, along the inward normal of the nearest edge. Endpoints further inside are
   left exactly where you put them. Set to `0` to disable.
 
-### Errors
+Errors
+------
 
 By default a failure throws an `Error` carrying a `code` (and `errors` for validation
 failures). With `errorMode: 'code'` the same information is returned as
@@ -141,7 +147,8 @@ if (!res.ok) console.warn(res.code, res.where);
 Set `validate: false` to skip validation when you know the polygon is well formed;
 triangulating a self-intersecting polygon produces a meaningless mesh rather than an error.
 
-### Subpath exports
+Subpath exports
+---------------
 
 The internals are importable directly if you want the pieces rather than the API:
 
