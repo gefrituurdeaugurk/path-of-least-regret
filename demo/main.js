@@ -51,7 +51,6 @@ const SNAP_R = 10,
     EDGE_SNAP = 8;
 let mesh = null; // library mesh object
 let triangles = []; // convenience alias
-let polySnapshot = null;
 const actor = {
     pos: {
         x: 220,
@@ -73,12 +72,10 @@ function clearError() {
     UI.error.style.display = 'none';
 }
 
-function deepCopy(p) {
-    return p.map(q => ({
-        x: q.x,
-        y: q.y
-    }));
-}
+const BUILD_OPTS = {
+    validate: true,
+    errorMode: 'code'
+};
 
 function rebuild() {
     if (!closed || poly.length < 3) {
@@ -86,29 +83,23 @@ function rebuild() {
         triangles = [];
         return;
     }
-    if (!mesh) {
-        const m = buildNavMesh(poly, {
-            validate: true,
-            errorMode: 'code'
-        });
+    if (mesh) {
+        // Diff-based rebuild: skips the work entirely when nothing moved.
+        const res = updatePolygon(mesh, poly, BUILD_OPTS);
+        if (res.error) {
+            showError(res.error.code);
+            return;
+        }
+    } else {
+        const m = buildNavMesh(poly, BUILD_OPTS);
         if (m.ok === false) {
             showError(m.code);
             return;
         }
         mesh = m;
-        triangles = mesh.tris || m.triangles; // support either shape
-    } else if (polySnapshot) {
-        // naive diff rebuild using updatePolygon
-        updatePolygon(mesh, poly);
-        triangles = mesh.tris || mesh.triangles;
-    } else {
-        mesh = buildNavMesh(poly, {
-            validate: true,
-            errorMode: 'code'
-        });
-        triangles = mesh.tris || mesh.triangles;
     }
-    polySnapshot = deepCopy(poly);
+    triangles = mesh.tris;
+    clearError();
 }
 
 function findVertexNear(p) {
@@ -159,17 +150,18 @@ function moveTo(target) {
     let smoothIterations = parseInt(UI.optSmoothIter?.value || '1', 10);
     if (isNaN(smoothIterations) || smoothIterations < 1) smoothIterations = 1;
     if (smoothIterations > 5) smoothIterations = 5;
-    const includeDebug = !!UI.optDebug?.checked;
     const result = findPath(mesh, startPt, goal, {
         smooth: smoothEnabled,
         smoothIterations,
-        errorMode: 'code',
-        includeDebug
+        errorMode: 'code'
     });
-    if (result && result.ok !== false) {
-        lastPortals = result.portals;
-        actor.path = prefix.concat(result.path.slice(1));
+    if (result.ok === false) {
+        showError(result.code === ErrorCodes.OUTSIDE_POLY ? 'Target is outside the shape' : result.code);
+        return;
     }
+    clearError();
+    lastPortals = result.portals;
+    actor.path = prefix.concat(result.path.slice(1));
 }
 
 canvas.addEventListener('mousemove', e => {
@@ -273,7 +265,6 @@ UI.resetBtn.addEventListener('click', () => {
     closed = false;
     triangles = [];
     mesh = null;
-    polySnapshot = null;
     clearError();
     draggingIndex = -1;
     hoverIndex = -1;

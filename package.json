@@ -1,0 +1,89 @@
+{
+  "name": "path-of-least-regret",
+  "version": "0.2.0",
+  "description": "Lightweight 2D polygon navmesh pathfinding: triangulation + A* + funnel + smoothing.",
+  "license": "MIT",
+  "author": {
+    "name": "Jeroen de Cloe"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/gefrituurdeaugurk/path-of-least-regret.git"
+  },
+  "bugs": {
+    "url": "https://github.com/gefrituurdeaugurk/path-of-least-regret/issues"
+  },
+  "homepage": "https://github.com/gefrituurdeaugurk/path-of-least-regret#readme",
+  "keywords": [
+    "navmesh",
+    "pathfinding",
+    "a-star",
+    "funnel",
+    "polygon",
+    "geometry",
+    "game-dev",
+    "2d"
+  ],
+  "type": "module",
+  "main": "dist/cjs/index.cjs",
+  "module": "lib/api.js",
+  "types": "lib/api.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/api.d.ts",
+      "import": "./lib/api.js",
+      "require": "./dist/cjs/index.cjs"
+    },
+    "./math": {
+      "types": "./lib/math.d.ts",
+      "import": "./lib/math.js",
+      "require": "./dist/cjs/math.cjs"
+    },
+    "./triangulate": {
+      "types": "./lib/triangulate.d.ts",
+      "import": "./lib/triangulate.js",
+      "require": "./dist/cjs/triangulate.cjs"
+    },
+    "./navmesh": {
+      "types": "./lib/navmesh.d.ts",
+      "import": "./lib/navmesh.js",
+      "require": "./dist/cjs/navmesh.cjs"
+    },
+    "./helpers": {
+      "types": "./lib/helpers.d.ts",
+      "import": "./lib/helpers.js",
+      "require": "./dist/cjs/helpers.cjs"
+    },
+    "./validate": {
+      "types": "./lib/validate.d.ts",
+      "import": "./lib/validate.js",
+      "require": "./dist/cjs/validate.cjs"
+    },
+    "./umd": "./lib/umd.js",
+    "./package.json": "./package.json"
+  },
+  "sideEffects": [
+    "./lib/umd.js"
+  ],
+  "engines": {
+    "node": ">=18"
+  },
+  "files": [
+    "lib",
+    "dist/cjs",
+    "LICENSE",
+    "README.md",
+    "CHANGELOG.md"
+  ],
+  "scripts": {
+    "build": "node scripts/build.cjs",
+    "test": "node --test \"test/*.test.mjs\"",
+    "test:dist": "npm run build && node --test \"test/*.test.cjs\"",
+    "typecheck": "tsc --noEmit --strict --target es2022 --module esnext --moduleResolution bundler lib/*.d.ts",
+    "prepublishOnly": "npm run typecheck && npm test && npm run test:dist"
+  },
+  "devDependencies": {
+    "esbuild": "^0.28.1",
+    "typescript": "^7.0.2"
+  }
+}
