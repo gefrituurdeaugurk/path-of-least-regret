@@ -28,6 +28,9 @@
   "main": "dist/cjs/index.cjs",
   "module": "lib/api.js",
   "types": "lib/api.d.ts",
+  "publishConfig": {
+    "access": "public"
+  },
   "exports": {
     ".": {
       "types": "./lib/api.d.ts",
