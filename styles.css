@@ -49,6 +49,21 @@ canvas {
   font-size: 13px;
 }
 
+.panel select,
+.panel .num {
+  background: #0c1118;
+  color: #e6e6e6;
+  border: 1px solid #2b3647;
+  border-radius: 8px;
+  padding: 4px 6px;
+  font: inherit;
+  font-size: 13px;
+}
+
+.panel .num {
+  width: 56px;
+}
+
 button {
   background: #2e7dd1;
   color: white;

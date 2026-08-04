@@ -11,12 +11,19 @@ const pkg = require(path.join(root, 'package.json'));
 
 /** Symbols each subpath must expose, in both module systems. */
 const SURFACE = {
-    '.': ['buildNavMesh', 'findPath', 'pathfind', 'updatePolygon', 'ErrorCodes', 'V'],
+    '.': [
+        'buildNavMesh', 'findPath', 'pathfind', 'updatePolygon', 'ErrorCodes', 'V',
+        'facingFromVector', 'createFacingTracker', 'createHorizonLayer', 'createHorizonSet',
+        'createMover'
+    ],
     './math': ['V', 'triArea2', 'area', 'isCCW', 'centroidTriangle'],
     './triangulate': ['triangulate'],
     './navmesh': ['buildAdjacency', 'findTriIdContaining', 'aStarTriangle', 'portalsFromTriPath', 'funnel'],
     './helpers': ['polyCentroid', 'nudgeInside', 'closestPointOnBoundary', 'pointInPolygon'],
-    './validate': ['validatePolygon', 'ValidationErrorCodes']
+    './validate': ['validatePolygon', 'ValidationErrorCodes'],
+    './facing': ['DIRECTION_SETS', 'bearingOf', 'facingFromVector', 'facingFromPoints', 'createFacingTracker'],
+    './horizon': ['HorizonErrorCodes', 'createHorizonLayer', 'createHorizonSet'],
+    './movement': ['EASINGS', 'pathLength', 'pointAtDistance', 'createMover']
 };
 
 test('every declared subpath points at files that exist', () => {

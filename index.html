@@ -26,6 +26,38 @@
       <button id="randomBtn">Random target</button>
       <span class="pill">A* on triangles + Robust Funnel</span>
     </div>
+    <div class="panel">
+      <label>Directions
+        <select id="dirCount">
+          <option value="4">4</option>
+          <option value="8" selected>8</option>
+          <option value="16">16</option>
+        </select>
+      </label>
+      <label>Hysteresis <input type="number" id="dirHysteresis" min="0" max="40" step="5" value="10" class="num"></label>
+      <label>Horizon layer
+        <select id="horizonLayer">
+          <option value="ground">Ground</option>
+          <option value="balcony">Balcony</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="toggleHorizons" checked> Show horizons</label>
+      <label><input type="checkbox" id="editHorizons"> Drag horizons</label>
+      <span class="pill" id="actorReadout">facing &mdash; &middot; scale &mdash;</span>
+    </div>
+    <div class="panel">
+      <label>Speed <input type="number" id="moveSpeed" min="20" max="600" step="10" value="160" class="num"></label>
+      <label>Ease in/out <input type="number" id="moveEase" min="0" max="240" step="10" value="60" class="num"></label>
+      <label>Easing
+        <select id="moveEasing">
+          <option value="smoothstep" selected>smoothstep</option>
+          <option value="sine">sine</option>
+          <option value="linear">linear</option>
+        </select>
+      </label>
+      <label><input type="checkbox" id="perspectiveSpeed" checked> Perspective speed</label>
+      <span class="pill">Speed is quoted at scale 1; the horizon layer scales it</span>
+    </div>
     <div id="error" class="error"></div>
     <div class="hint" id="hint"></div>
   </div>

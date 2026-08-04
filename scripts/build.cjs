@@ -19,7 +19,10 @@ const ENTRIES = {
   'triangulate.js': 'triangulate.cjs',
   'navmesh.js': 'navmesh.cjs',
   'helpers.js': 'helpers.cjs',
-  'validate.js': 'validate.cjs'
+  'validate.js': 'validate.cjs',
+  'facing.js': 'facing.cjs',
+  'horizon.js': 'horizon.cjs',
+  'movement.js': 'movement.cjs'
 };
 
 async function main() {

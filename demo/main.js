@@ -15,11 +15,21 @@ import {
     closestPointOnBoundary
 } from '../lib/helpers.js';
 import {
+    createFacingTracker
+} from '../lib/facing.js';
+import {
+    createHorizonSet
+} from '../lib/horizon.js';
+import {
+    createMover
+} from '../lib/movement.js';
+import {
     drawGround,
     drawEdit,
     drawNavmesh,
     drawPortals,
     drawPath,
+    drawHorizons,
     drawActor
 } from './render.js';
 
@@ -36,6 +46,16 @@ const UI = {
     optSmoothIter: document.getElementById('optSmoothIter'),
     optDebug: document.getElementById('optDebug'),
     randomBtn: document.getElementById('randomBtn'),
+    dirCount: document.getElementById('dirCount'),
+    dirHysteresis: document.getElementById('dirHysteresis'),
+    horizonLayer: document.getElementById('horizonLayer'),
+    showHorizons: document.getElementById('toggleHorizons'),
+    editHorizons: document.getElementById('editHorizons'),
+    moveSpeed: document.getElementById('moveSpeed'),
+    moveEase: document.getElementById('moveEase'),
+    moveEasing: document.getElementById('moveEasing'),
+    perspectiveSpeed: document.getElementById('perspectiveSpeed'),
+    actorReadout: document.getElementById('actorReadout'),
     error: document.getElementById('error'),
     hint: document.getElementById('hint')
 };
@@ -57,11 +77,62 @@ const actor = {
         y: 320
     },
     path: [],
-    speed: 140,
-    radius: 10
+    speed: 0,
+    radius: 10,
+    facing: null,
+    scale: 1
 };
 let lastPortals = null;
+let mover = null;
 const rnd = (a, b) => Math.random() * (b - a) + a;
+
+// Two depth planes: the ground the actor walks on, and a raised one it would switch to
+// after disappearing up a staircase. 216 and 576 are 30% and 80% of the canvas height.
+const HORIZON_LAYERS = {
+    ground: [{ y: 216, scale: 0.5 }, { y: 576, scale: 1.1 }],
+    balcony: [{ y: 96, scale: 0.2 }, { y: 320, scale: 0.55 }]
+};
+const HORIZON_SNAP = 10;
+let horizons = createHorizonSet(HORIZON_LAYERS);
+let facingTracker = createFacingTracker({ directions: 8, hysteresis: 10 });
+let hoverHorizonIndex = -1,
+    draggingHorizonIndex = -1;
+
+const activeHorizons = () => HORIZON_LAYERS[horizons.active];
+const horizonEditing = () => mode === 'play' && UI.editHorizons.checked;
+
+// createHorizonSet snapshots its input, so a dragged line needs the set rebuilt.
+function rebuildHorizons() {
+    const active = horizons.active;
+    horizons = createHorizonSet(HORIZON_LAYERS);
+    horizons.use(active);
+}
+
+function rebuildFacing() {
+    const directions = Number(UI.dirCount.value) || 8;
+    const hysteresis = Number(UI.dirHysteresis.value) || 0;
+    facingTracker = createFacingTracker({ directions, hysteresis });
+    actor.facing = null;
+}
+
+function moverOptions() {
+    const ease = Math.max(0, Number(UI.moveEase.value) || 0);
+    return {
+        speed: Number(UI.moveSpeed.value) || 160,
+        easeIn: ease,
+        easeOut: ease,
+        easing: UI.moveEasing.value,
+        // A closure, not the set itself: dragging a horizon replaces `horizons`.
+        perspective: UI.perspectiveSpeed.checked ? (p) => horizons.scaleAt(p) : null
+    };
+}
+
+// Ease and perspective are fixed when a mover is built, so changing them mid-walk means
+// starting a fresh mover on what is left of the path.
+function refreshMover() {
+    if (!mover) return;
+    mover = createMover([{ ...actor.pos }, ...mover.remaining()], moverOptions());
+}
 
 function showError(msg) {
     UI.error.textContent = msg;
@@ -108,6 +179,21 @@ function findVertexNear(p) {
     return -1;
 }
 
+// The demo's horizons are all horizontal, so vertical distance is the whole test.
+function findHorizonNear(p) {
+    const rows = activeHorizons();
+    let best = HORIZON_SNAP + 1,
+        index = -1;
+    for (let i = 0; i < rows.length; i++) {
+        const d = Math.abs(p.y - rows[i].y);
+        if (d < best) {
+            best = d;
+            index = i;
+        }
+    }
+    return best <= HORIZON_SNAP ? index : -1;
+}
+
 function distToSegment(p, a, b) {
     const ab = V.sub(b, a);
     const t = Math.max(0, Math.min(1, ((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / (ab.x * ab.x + ab.y * ab.y || 1)));
@@ -130,8 +216,7 @@ function toCanvas(e) {
     };
 }
 
-function moveTo(target) {
-    if (!closed || !triangles.length) return;
+function moveTo(target) {    if (!closed || !triangles.length) return;
     const goalInside = findTriIdContaining(target, triangles) != null;
     const goal = goalInside ? target : nudgeInside(closestPointOnBoundary(target, poly), poly, 0.75);
     let startPt = {
@@ -161,11 +246,22 @@ function moveTo(target) {
     }
     clearError();
     lastPortals = result.portals;
-    actor.path = prefix.concat(result.path.slice(1));
+    mover = createMover([{ ...actor.pos }, ...prefix, ...result.path.slice(1)], moverOptions());
+    actor.path = mover.remaining();
 }
 
 canvas.addEventListener('mousemove', e => {
     const p = toCanvas(e);
+    if (horizonEditing()) {
+        if (draggingHorizonIndex >= 0) {
+            activeHorizons()[draggingHorizonIndex].y = Math.max(0, Math.min(canvas.height, p.y));
+            rebuildHorizons();
+        } else {
+            hoverHorizonIndex = findHorizonNear(p);
+        }
+        return;
+    }
+    hoverHorizonIndex = -1;
     if (mode === 'edit') {
         if (draggingIndex >= 0) {
             poly[draggingIndex] = p;
@@ -188,6 +284,10 @@ canvas.addEventListener('mousemove', e => {
     }
 });
 canvas.addEventListener('mousedown', e => {
+    if (horizonEditing()) {
+        draggingHorizonIndex = findHorizonNear(toCanvas(e));
+        return;
+    }
     if (mode !== 'edit') return;
     const p = toCanvas(e);
     const idx = findVertexNear(p);
@@ -200,8 +300,10 @@ canvas.addEventListener('mousedown', e => {
 });
 window.addEventListener('mouseup', () => {
     if (draggingIndex >= 0) draggingIndex = -1;
+    if (draggingHorizonIndex >= 0) draggingHorizonIndex = -1;
 });
 canvas.addEventListener('click', e => {
+    if (horizonEditing()) return;
     const p = toCanvas(e);
     if (mode === 'edit') {
         clearError();
@@ -265,6 +367,8 @@ UI.resetBtn.addEventListener('click', () => {
     closed = false;
     triangles = [];
     mesh = null;
+    mover = null;
+    actor.path = [];
     clearError();
     draggingIndex = -1;
     hoverIndex = -1;
@@ -304,29 +408,51 @@ UI.randomBtn.addEventListener('click', () => {
         y: c.y + rnd(-60, 60)
     });
 });
+UI.dirCount.addEventListener('change', rebuildFacing);
+UI.dirHysteresis.addEventListener('change', rebuildFacing);
+UI.moveSpeed.addEventListener('change', refreshMover);
+UI.moveEase.addEventListener('change', refreshMover);
+UI.moveEasing.addEventListener('change', refreshMover);
+UI.perspectiveSpeed.addEventListener('change', refreshMover);
+UI.horizonLayer.addEventListener('change', () => {
+    horizons.use(UI.horizonLayer.value);
+    hoverHorizonIndex = -1;
+    draggingHorizonIndex = -1;
+});
 
 function update(dt) {
-    if (mode !== 'play' || !actor.path.length) return;
-    const tgt = actor.path[0];
-    const dir = V.sub(tgt, actor.pos);
-    const d = V.len(dir);
-    const step = actor.speed * dt;
-    if (d <= step) {
-        actor.pos = tgt;
-        actor.path.shift();
+    if (mode === 'play' && mover && !mover.done) {
+        const s = mover.step(dt);
+        actor.pos = s.position;
+        actor.speed = s.speed;
+        actor.facing = facingTracker.update(s.velocity);
     } else {
-        actor.pos = V.add(actor.pos, V.mul(V.norm(dir), step));
+        actor.speed = 0;
     }
+    actor.path = mover ? mover.remaining() : [];
+    actor.scale = horizons.scaleAt(actor.pos);
+}
+
+function updateReadout() {
+    const f = actor.facing;
+    const facing = f ? `${f.name} (${Math.round(f.angle)}\u00b0)` : '\u2014';
+    UI.actorReadout.textContent = `facing ${facing} \u00b7 scale ${actor.scale.toFixed(2)}`
+        + ` \u00b7 speed ${Math.round(actor.speed)}/s \u00b7 layer ${horizons.active}`;
 }
 
 function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawGround(ctx, canvas);
+    drawHorizons(ctx, canvas, activeHorizons(), UI.showHorizons.checked, horizonEditing() ? hoverHorizonIndex : -1);
     if (mode === 'edit') drawEdit(ctx, poly, closed, hoverEdgeIndex, selectedEdgeIndex, hoverIndex, UI);
+    else UI.hint.textContent = horizonEditing()
+        ? 'Drag a dashed horizon line to move it; the actor rescales as you drag.'
+        : 'Play: click inside to walk there. The panel shows the facing and scale the helpers report.';
     drawNavmesh(ctx, UI.showMesh.checked, triangles);
     drawPath(ctx, actor, UI.showWaypoints.checked);
     drawPortals(ctx, UI.showPortals.checked && UI.optDebug?.checked, lastPortals);
     drawActor(ctx, actor);
+    updateReadout();
 }
 
 function tick(t) {

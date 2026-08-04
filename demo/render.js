@@ -109,8 +109,28 @@ export function drawPath(ctx, actor, showWaypoints) {
         }
     }
 }
+export function drawHorizons(ctx, canvas, horizons, show, hoverIndex) {
+    if (!show || !horizons) return;
+    ctx.save();
+    ctx.setLineDash([14, 8]);
+    ctx.font = '12px ui-sans-serif, system-ui, sans-serif';
+    ctx.textBaseline = 'bottom';
+    for (let i = 0; i < horizons.length; i++) {
+        const h = horizons[i];
+        const active = i === hoverIndex;
+        ctx.lineWidth = active ? 3 : 1.5;
+        ctx.strokeStyle = active ? '#f7b267' : 'rgba(247,178,103,0.45)';
+        ctx.beginPath();
+        ctx.moveTo(0, h.y);
+        ctx.lineTo(canvas.width, h.y);
+        ctx.stroke();
+        ctx.fillStyle = active ? '#f7b267' : 'rgba(247,178,103,0.7)';
+        ctx.fillText(`horizon \u00d7${h.scale.toFixed(2)}`, 10, h.y - 4);
+    }
+    ctx.restore();
+}
 export function drawActor(ctx, actor) {
-    const s = 0.6 + (actor.pos.y / 720) * 0.6;
+    const s = actor.scale;
     const r = actor.radius * s;
     ctx.globalAlpha = 0.35;
     ctx.beginPath();
@@ -122,12 +142,33 @@ export function drawActor(ctx, actor) {
     ctx.arc(actor.pos.x, actor.pos.y, r, 0, Math.PI * 2);
     ctx.fillStyle = '#a6d1ff';
     ctx.fill();
-    if (actor.path.length) {
-        const dir = V.norm(V.sub(actor.path[0], actor.pos));
-        const eye = V.add(actor.pos, V.mul(dir, r * 0.6));
-        ctx.beginPath();
-        ctx.arc(eye.x, eye.y, r * 0.22, 0, Math.PI * 2);
-        ctx.fillStyle = '#0b223a';
-        ctx.fill();
-    }
+    if (!actor.facing) return;
+
+    // The snapped bearing, not the raw movement vector: this is the sprite that would
+    // actually be on screen.
+    const rad = (actor.facing.bearing * Math.PI) / 180;
+    const dir = { x: Math.sin(rad), y: -Math.cos(rad) };
+    const eye = V.add(actor.pos, V.mul(dir, r * 0.6));
+    ctx.beginPath();
+    ctx.arc(eye.x, eye.y, r * 0.22, 0, Math.PI * 2);
+    ctx.fillStyle = '#0b223a';
+    ctx.fill();
+
+    const tip = V.add(actor.pos, V.mul(dir, r * 2.2));
+    const side = { x: -dir.y, y: dir.x };
+    const base = V.add(actor.pos, V.mul(dir, r * 1.4));
+    ctx.beginPath();
+    ctx.moveTo(tip.x, tip.y);
+    ctx.lineTo(base.x + side.x * r * 0.5, base.y + side.y * r * 0.5);
+    ctx.lineTo(base.x - side.x * r * 0.5, base.y - side.y * r * 0.5);
+    ctx.closePath();
+    ctx.fillStyle = '#e8f2ff';
+    ctx.fill();
+
+    ctx.font = `${Math.max(11, Math.round(12 * s))}px ui-sans-serif, system-ui, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'bottom';
+    ctx.fillStyle = '#c7d8ee';
+    ctx.fillText(actor.facing.name, actor.pos.x, actor.pos.y - r - 6);
+    ctx.textAlign = 'start';
 }

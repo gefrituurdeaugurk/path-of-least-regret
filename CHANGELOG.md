@@ -4,6 +4,35 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and this project adheres (lightly) to [Semantic Versioning](https://semver.org/).
 
+## [Unreleased]
+
+### Added
+
+- **Facing helper** (`path-of-least-regret/facing`). Turns a movement vector into one of 4,
+  8 or 16 compass directions so an integrator can pick a sprite row: `facingFromVector`,
+  `facingFromPoints`, `bearingOf`, the `DIRECTION_SETS` presets, and `createFacingTracker`,
+  which remembers its last answer and applies a hysteresis deadzone so a character walking
+  along a sector boundary does not flicker between two sprites.
+- **Horizon helper** (`path-of-least-regret/horizon`). `createHorizonLayer` builds a scale
+  ramp from two or more horizons — `{ y, scale }`, or `{ a, b, scale }` for a tilted one —
+  and interpolates the character scale between them, clamping beyond the outermost.
+  `createHorizonSet` holds several named layers with one active at a time, for scenes where
+  walking out of view puts the actor on a different depth plane. New error codes
+  `NO_LAYERS`, `NOT_ENOUGH_HORIZONS`, `INVALID_HORIZON` and `UNKNOWN_LAYER`.
+- **Movement helper** (`path-of-least-regret/movement`). `createMover` turns a path into a
+  per-frame position: `speed` in units per second, `easeIn`/`easeOut` ramps measured in
+  distance rather than time, a choice of `smoothstep`, `sine`, `linear` or custom easing,
+  and an optional `perspective` cue — hand it a horizon layer or set and a character in the
+  distance walks slower in proportion to its scale. Each `step(dt)` reports position,
+  velocity, speed, progress and completion; `setPath`, `setSpeed`, `stop` and `remaining`
+  cover redirecting and drawing. `pathLength` and `pointAtDistance` are exported alongside.
+- All three helpers are re-exported from the main entry point and therefore from
+  `window.NavMeshPF`, and the demo now uses them: a facing arrow and label on the actor, a
+  direction-count and hysteresis selector, draggable horizon lines, and speed, easing and
+  perspective-speed controls.
+- The README gains an "Integrator helpers" section documenting each helper with worked
+  examples, plus a combined game-loop example wiring all three together.
+
 ## [0.2.0] - 2026-08-04
 
 Correctness and packaging release. Several fixes change observable behaviour; the

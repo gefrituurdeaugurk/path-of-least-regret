@@ -1,0 +1,72 @@
+name: npm Publish
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: npm-publish-${{ github.event_name }}-${{ github.event.pull_request.number || github.ref_name }}
+  cancel-in-progress: true
+
+jobs:
+  publish-preview:
+    # Trusted publishing is tied to this repository/workflow identity,
+    # so fork PRs cannot publish.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      !github.event.pull_request.draft
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      - name: Set unique preview version
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          RUN_ID="${{ github.run_id }}"
+          BASE_VERSION=$(node -p "require('./package.json').version")
+          PREVIEW_VERSION="${BASE_VERSION}-pr.${PR_NUMBER}.${RUN_ID}"
+          npm version --no-git-tag-version "$PREVIEW_VERSION"
+
+      - name: Publish preview to npm
+        run: npm publish --tag "pr-${{ github.event.pull_request.number }}"
+
+  publish-release:
+    if: github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.x'
+          registry-url: https://registry.npmjs.org
+
+      - run: npm ci
+
+      - name: Verify tag matches package version
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "Tag version ($TAG_VERSION) does not match package.json version ($PKG_VERSION)."
+            exit 1
+          fi
+
+      - name: Publish stable release to npm
+        run: npm publish

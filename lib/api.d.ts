@@ -1,3 +1,14 @@
+import {
+    DIRECTION_SETS,
+    bearingOf,
+    facingFromVector,
+    facingFromPoints,
+    createFacingTracker
+} from './facing.js';
+import { HorizonErrorCodes, createHorizonLayer, createHorizonSet } from './horizon.js';
+import type { HorizonErrorCode } from './horizon.js';
+import { EASINGS, pathLength, pointAtDistance, createMover } from './movement.js';
+
 export interface Point { x: number; y: number; }
 
 /** A triangle is a 3-tuple of vertices, wound counter-clockwise. */
@@ -25,7 +36,8 @@ export type ErrorCode =
     | 'NO_PATH'
     | 'NOT_ENOUGH_VERTICES'
     | 'DUPLICATE_ADJACENT_VERTEX'
-    | 'SELF_INTERSECTION';
+    | 'SELF_INTERSECTION'
+    | HorizonErrorCode;
 
 export interface ValidationError { code: ErrorCode; message: string; }
 
@@ -75,6 +87,10 @@ export const ErrorCodes: {
     NOT_ENOUGH_VERTICES: 'NOT_ENOUGH_VERTICES';
     DUPLICATE_ADJACENT_VERTEX: 'DUPLICATE_ADJACENT_VERTEX';
     SELF_INTERSECTION: 'SELF_INTERSECTION';
+    NO_LAYERS: 'NO_LAYERS';
+    NOT_ENOUGH_HORIZONS: 'NOT_ENOUGH_HORIZONS';
+    INVALID_HORIZON: 'INVALID_HORIZON';
+    UNKNOWN_LAYER: 'UNKNOWN_LAYER';
 };
 
 export const ValidationErrorCodes: {
@@ -132,6 +148,34 @@ export function area(poly: Point[]): number;
 export function isCCW(poly: Point[]): boolean;
 export function centroidTriangle(t: Triangle): Point;
 
+export {
+    DIRECTION_SETS,
+    bearingOf,
+    facingFromVector,
+    facingFromPoints,
+    createFacingTracker,
+    HorizonErrorCodes,
+    createHorizonLayer,
+    createHorizonSet,
+    EASINGS,
+    pathLength,
+    pointAtDistance,
+    createMover
+};
+export type { Facing, FacingOptions, FacingTracker, FacingTrackerOptions } from './facing.js';
+export type {
+    Horizon,
+    HorizonErrorCode,
+    HorizonFailure,
+    HorizonLayer,
+    HorizonOptions,
+    HorizonSet,
+    HorizontalHorizon,
+    NormalisedHorizon,
+    TiltedHorizon
+} from './horizon.js';
+export type { EasingFn, Mover, MoverOptions, MoverStep, PathInput } from './movement.js';
+
 declare const api: {
     buildNavMesh: typeof buildNavMesh;
     findPath: typeof findPath;
@@ -139,6 +183,7 @@ declare const api: {
     updatePolygon: typeof updatePolygon;
     ErrorCodes: typeof ErrorCodes;
     ValidationErrorCodes: typeof ValidationErrorCodes;
+    HorizonErrorCodes: typeof HorizonErrorCodes;
     helpers: {
         polyCentroid: typeof polyCentroid;
         nudgeInside: typeof nudgeInside;
@@ -150,6 +195,23 @@ declare const api: {
         area: typeof area;
         isCCW: typeof isCCW;
         centroidTriangle: typeof centroidTriangle;
+    };
+    facing: {
+        DIRECTION_SETS: typeof DIRECTION_SETS;
+        bearingOf: typeof bearingOf;
+        facingFromVector: typeof facingFromVector;
+        facingFromPoints: typeof facingFromPoints;
+        createFacingTracker: typeof createFacingTracker;
+    };
+    horizon: {
+        createHorizonLayer: typeof createHorizonLayer;
+        createHorizonSet: typeof createHorizonSet;
+    };
+    movement: {
+        EASINGS: typeof EASINGS;
+        pathLength: typeof pathLength;
+        pointAtDistance: typeof pointAtDistance;
+        createMover: typeof createMover;
     };
 };
 

@@ -59,6 +59,21 @@
       "import": "./lib/validate.js",
       "require": "./dist/cjs/validate.cjs"
     },
+    "./facing": {
+      "types": "./lib/facing.d.ts",
+      "import": "./lib/facing.js",
+      "require": "./dist/cjs/facing.cjs"
+    },
+    "./horizon": {
+      "types": "./lib/horizon.d.ts",
+      "import": "./lib/horizon.js",
+      "require": "./dist/cjs/horizon.cjs"
+    },
+    "./movement": {
+      "types": "./lib/movement.d.ts",
+      "import": "./lib/movement.js",
+      "require": "./dist/cjs/movement.cjs"
+    },
     "./umd": "./lib/umd.js",
     "./package.json": "./package.json"
   },
