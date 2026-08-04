@@ -12,8 +12,10 @@
   <div class="wrap">
     <canvas id="scene" width="1280" height="720"></canvas>
     <div class="panel">
-      <button id="editBtn">Edit mode</button>
-      <button id="playBtn" class="secondary">Play mode</button>
+      <div class="toggle" role="group" aria-label="Mode">
+        <button id="editBtn" aria-pressed="true">Edit</button>
+        <button id="playBtn" aria-pressed="false">Play</button>
+      </div>
       <button id="resetBtn" class="secondary">Reset shape</button>
       <span class="pill">Edit: click to add points, click first point to close, drag points, Backspace remove, '='
         splits edge</span>

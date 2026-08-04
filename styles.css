@@ -79,6 +79,34 @@ button.secondary {
   background: #263143;
 }
 
+/* Segmented control: the pressed half is the mode you are in, not the one you would switch to. */
+.toggle {
+  display: inline-flex;
+  padding: 3px;
+  gap: 3px;
+  background: #0c1118;
+  border: 1px solid #2b3647;
+  border-radius: 12px;
+}
+
+.toggle button {
+  background: transparent;
+  color: #8b97a8;
+  border-radius: 9px;
+  padding: 6px 16px;
+}
+
+.toggle button[aria-pressed="true"] {
+  background: #2e7dd1;
+  color: #fff;
+  box-shadow: 0 1px 6px rgba(46, 125, 209, .45);
+}
+
+.toggle button:not([aria-pressed="true"]):hover {
+  color: #e6e6e6;
+  background: #1b2431;
+}
+
 .error {
   width: min(96vw, 1100px);
   background: #4a1f2a;

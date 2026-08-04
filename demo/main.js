@@ -93,13 +93,28 @@ const HORIZON_LAYERS = {
     balcony: [{ y: 96, scale: 0.2 }, { y: 320, scale: 0.55 }]
 };
 const HORIZON_SNAP = 10;
+// Two lines closer than this would leave the upper one impossible to grab again.
+const HORIZON_MIN_GAP = 24;
 let horizons = createHorizonSet(HORIZON_LAYERS);
 let facingTracker = createFacingTracker({ directions: 8, hysteresis: 10 });
 let hoverHorizonIndex = -1,
     draggingHorizonIndex = -1;
+// Set fresh on every mousedown, so a drag that never produced a click cannot poison a later one.
+let grabbedHorizon = false;
 
 const activeHorizons = () => HORIZON_LAYERS[horizons.active];
-const horizonEditing = () => mode === 'play' && UI.editHorizons.checked;
+const horizonEditing = () => UI.editHorizons.checked;
+
+function setMode(next) {
+    mode = next;
+    UI.editBtn.setAttribute('aria-pressed', String(next === 'edit'));
+    UI.playBtn.setAttribute('aria-pressed', String(next === 'play'));
+    hoverEdgeIndex = -1;
+    selectedEdgeIndex = -1;
+    draggingIndex = -1;
+    draggingHorizonIndex = -1;
+    clearError();
+}
 
 // createHorizonSet snapshots its input, so a dragged line needs the set rebuilt.
 function rebuildHorizons() {
@@ -194,6 +209,21 @@ function findHorizonNear(p) {
     return best <= HORIZON_SNAP ? index : -1;
 }
 
+// Keeps a dragged line inside the canvas and clear of its neighbours, so no two lines can
+// end up stacked on top of each other where only the first would ever be grabbable.
+function clampHorizonY(index, y) {
+    const rows = activeHorizons();
+    const current = rows[index].y;
+    let lo = 0,
+        hi = canvas.height;
+    for (let i = 0; i < rows.length; i++) {
+        if (i === index) continue;
+        if (rows[i].y <= current) lo = Math.max(lo, rows[i].y + HORIZON_MIN_GAP);
+        else hi = Math.min(hi, rows[i].y - HORIZON_MIN_GAP);
+    }
+    return Math.max(lo, Math.min(hi, y));
+}
+
 function distToSegment(p, a, b) {
     const ab = V.sub(b, a);
     const t = Math.max(0, Math.min(1, ((p.x - a.x) * ab.x + (p.y - a.y) * ab.y) / (ab.x * ab.x + ab.y * ab.y || 1)));
@@ -216,7 +246,8 @@ function toCanvas(e) {
     };
 }
 
-function moveTo(target) {    if (!closed || !triangles.length) return;
+function moveTo(target) {
+    if (!closed || !triangles.length) return;
     const goalInside = findTriIdContaining(target, triangles) != null;
     const goal = goalInside ? target : nudgeInside(closestPointOnBoundary(target, poly), poly, 0.75);
     let startPt = {
@@ -252,16 +283,23 @@ function moveTo(target) {    if (!closed || !triangles.length) return;
 
 canvas.addEventListener('mousemove', e => {
     const p = toCanvas(e);
+    // A mouseup released outside the window never reaches us, so trust the button state.
+    if (draggingHorizonIndex >= 0 && e.buttons === 0) draggingHorizonIndex = -1;
     if (horizonEditing()) {
         if (draggingHorizonIndex >= 0) {
-            activeHorizons()[draggingHorizonIndex].y = Math.max(0, Math.min(canvas.height, p.y));
+            activeHorizons()[draggingHorizonIndex].y = clampHorizonY(draggingHorizonIndex, p.y);
             rebuildHorizons();
-        } else {
-            hoverHorizonIndex = findHorizonNear(p);
+            return;
         }
-        return;
+        hoverHorizonIndex = findHorizonNear(p);
+        if (hoverHorizonIndex >= 0) {
+            hoverIndex = -1;
+            hoverEdgeIndex = -1;
+            return;
+        }
+    } else {
+        hoverHorizonIndex = -1;
     }
-    hoverHorizonIndex = -1;
     if (mode === 'edit') {
         if (draggingIndex >= 0) {
             poly[draggingIndex] = p;
@@ -284,10 +322,9 @@ canvas.addEventListener('mousemove', e => {
     }
 });
 canvas.addEventListener('mousedown', e => {
-    if (horizonEditing()) {
-        draggingHorizonIndex = findHorizonNear(toCanvas(e));
-        return;
-    }
+    draggingHorizonIndex = horizonEditing() ? findHorizonNear(toCanvas(e)) : -1;
+    grabbedHorizon = draggingHorizonIndex >= 0;
+    if (grabbedHorizon) return;
     if (mode !== 'edit') return;
     const p = toCanvas(e);
     const idx = findVertexNear(p);
@@ -302,8 +339,12 @@ window.addEventListener('mouseup', () => {
     if (draggingIndex >= 0) draggingIndex = -1;
     if (draggingHorizonIndex >= 0) draggingHorizonIndex = -1;
 });
+canvas.addEventListener('mouseleave', () => {
+    hoverHorizonIndex = -1;
+});
 canvas.addEventListener('click', e => {
-    if (horizonEditing()) return;
+    // The click that closes a horizon drag belongs to the drag, not to the scene.
+    if (grabbedHorizon) return;
     const p = toCanvas(e);
     if (mode === 'edit') {
         clearError();
@@ -375,12 +416,7 @@ UI.resetBtn.addEventListener('click', () => {
     hoverEdgeIndex = -1;
     selectedEdgeIndex = -1;
 });
-UI.editBtn.addEventListener('click', () => {
-    mode = 'edit';
-    clearError();
-    hoverEdgeIndex = -1;
-    selectedEdgeIndex = -1;
-});
+UI.editBtn.addEventListener('click', () => setMode('edit'));
 UI.playBtn.addEventListener('click', () => {
     if (!closed) {
         showError('Close polygon first');
@@ -393,8 +429,7 @@ UI.playBtn.addEventListener('click', () => {
             return;
         }
     }
-    mode = 'play';
-    clearError();
+    setMode('play');
 });
 UI.randomBtn.addEventListener('click', () => {
     if (mode !== 'play') {
@@ -416,6 +451,12 @@ UI.moveEasing.addEventListener('change', refreshMover);
 UI.perspectiveSpeed.addEventListener('change', refreshMover);
 UI.horizonLayer.addEventListener('change', () => {
     horizons.use(UI.horizonLayer.value);
+    hoverHorizonIndex = -1;
+    draggingHorizonIndex = -1;
+});
+UI.editHorizons.addEventListener('change', () => {
+    // Nothing to grab if the lines are hidden.
+    if (UI.editHorizons.checked) UI.showHorizons.checked = true;
     hoverHorizonIndex = -1;
     draggingHorizonIndex = -1;
 });
@@ -443,10 +484,10 @@ function updateReadout() {
 function render() {
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     drawGround(ctx, canvas);
-    drawHorizons(ctx, canvas, activeHorizons(), UI.showHorizons.checked, horizonEditing() ? hoverHorizonIndex : -1);
+    drawHorizons(ctx, canvas, activeHorizons(), UI.showHorizons.checked || horizonEditing(), horizonEditing() ? hoverHorizonIndex : -1);
     if (mode === 'edit') drawEdit(ctx, poly, closed, hoverEdgeIndex, selectedEdgeIndex, hoverIndex, UI);
     else UI.hint.textContent = horizonEditing()
-        ? 'Drag a dashed horizon line to move it; the actor rescales as you drag.'
+        ? 'Drag a dashed horizon line to move it; click elsewhere to walk there.'
         : 'Play: click inside to walk there. The panel shows the facing and scale the helpers report.';
     drawNavmesh(ctx, UI.showMesh.checked, triangles);
     drawPath(ctx, actor, UI.showWaypoints.checked);
