@@ -27,6 +27,25 @@ export const BOWTIE = [
     { x: 0, y: 100 }
 ];
 
+/** Room-sized square, big enough to cut holes out of. */
+export const ROOM = [
+    { x: 0, y: 0 },
+    { x: 400, y: 0 },
+    { x: 400, y: 400 },
+    { x: 0, y: 400 }
+];
+
+/** A reception desk in the middle of ROOM: reachable from all four sides. */
+export const DESK = [
+    { x: 150, y: 150 },
+    { x: 250, y: 150 },
+    { x: 250, y: 250 },
+    { x: 150, y: 250 }
+];
+
+/** ROOM with DESK cut out of it — the donut a path has to go round. */
+export const DONUT = { outline: ROOM, holes: [DESK] };
+
 export const close = (a, b, eps = 1e-6) => Math.abs(a - b) <= eps;
 
 export function assertPointsClose(actual, expected, msg) {

@@ -11,6 +11,23 @@ export function drawGround(ctx, canvas) {
     ctx.fillStyle = g;
     ctx.fillRect(0, 0, canvas.width, canvas.height);
 }
+export function drawObstacles(ctx, holes, hoverIndex = -1) {
+    if (!holes?.length) return;
+    for (let i = 0; i < holes.length; i++) {
+        const h = holes[i];
+        if (h.length < 3) continue;
+        ctx.beginPath();
+        ctx.moveTo(h[0].x, h[0].y);
+        for (let j = 1; j < h.length; j++) ctx.lineTo(h[j].x, h[j].y);
+        ctx.closePath();
+        ctx.fillStyle = i === hoverIndex ? 'rgba(255,138,128,0.28)' : 'rgba(20,26,36,0.85)';
+        ctx.fill();
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = i === hoverIndex ? '#ff8a80' : '#5b6b86';
+        ctx.stroke();
+    }
+}
+
 export function drawEdit(ctx, poly, closed, hoverEdgeIndex, selectedEdgeIndex, hoverIndex, UI) {
     if (!poly.length) {
         UI.hint.textContent = 'Edit: click to add points. Close by clicking first point.';

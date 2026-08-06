@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { fileURLToPath } from 'node:url';
+import { readFile } from 'node:fs/promises';
 import path from 'node:path';
 import esbuild from 'esbuild';
 
@@ -33,4 +34,15 @@ test('the demo imports only names the library actually exports', async () => {
         !/does not provide an export|Cannot find module/.test(main.message),
         `unexpected module error: ${main.message}`
     );
+});
+
+test('every element the demo looks up exists in the page', async () => {
+    // getElementById returning null fails silently at the first use, often much later.
+    const js = await readFile(path.join(root, 'demo/main.js'), 'utf8');
+    const html = await readFile(path.join(root, 'index.html'), 'utf8');
+    const ids = [...js.matchAll(/getElementById\('([^']+)'\)/g)].map((m) => m[1]);
+    assert.ok(ids.length > 0, 'expected the demo to look up some elements');
+    for (const id of ids) {
+        assert.ok(html.includes(`id="${id}"`), `index.html has no element with id "${id}"`);
+    }
 });

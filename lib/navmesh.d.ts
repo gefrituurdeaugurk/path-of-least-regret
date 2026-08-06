@@ -17,7 +17,11 @@ export function aStarTriangle(
     goalId: number | null,
     triangles: Triangle[],
     adj: Adjacency,
-    centroids?: Point[]
+    centroids?: Point[],
+    opts?: {
+        /** Refuse to cross a shared edge shorter than this. Default `0`. */
+        minPortalWidth?: number;
+    }
 ): number[] | null;
 
 /** Portals crossed along a triangle path. Pass `adj` to reuse precomputed shared edges. */

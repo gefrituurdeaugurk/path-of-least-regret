@@ -14,13 +14,15 @@ const SURFACE = {
     '.': [
         'buildNavMesh', 'findPath', 'pathfind', 'updatePolygon', 'ErrorCodes', 'V',
         'facingFromVector', 'createFacingTracker', 'createHorizonLayer', 'createHorizonSet',
-        'createMover'
+        'createMover', 'isWalkable', 'clampToWalkable', 'pointInRegion',
+        'closestPointOnRegionBoundary', 'distanceToRegionBoundary', 'nudgeIntoRegion',
+        'validateRegion'
     ],
     './math': ['V', 'triArea2', 'area', 'isCCW', 'centroidTriangle'],
-    './triangulate': ['triangulate'],
+    './triangulate': ['triangulate', 'triangulateRegion'],
     './navmesh': ['buildAdjacency', 'findTriIdContaining', 'aStarTriangle', 'portalsFromTriPath', 'funnel'],
     './helpers': ['polyCentroid', 'nudgeInside', 'closestPointOnBoundary', 'pointInPolygon'],
-    './validate': ['validatePolygon', 'ValidationErrorCodes'],
+    './validate': ['validatePolygon', 'validateRegion', 'ValidationErrorCodes'],
     './facing': ['DIRECTION_SETS', 'bearingOf', 'facingFromVector', 'facingFromPoints', 'createFacingTracker'],
     './horizon': ['HorizonErrorCodes', 'createHorizonLayer', 'createHorizonSet'],
     './movement': ['EASINGS', 'pathLength', 'pointAtDistance', 'createMover']

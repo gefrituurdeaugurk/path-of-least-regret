@@ -4,10 +4,45 @@ All notable changes to this project will be documented in this file.
 
 The format is inspired by [Keep a Changelog](https://keepachangelog.com/en/1.0.0/) and this project adheres (lightly) to [Semantic Versioning](https://semver.org/).
 
-## [Unreleased]
+## [0.3.0] - 2026-08-06
 
 ### Added
 
+- **Obstacles (holes).** Every entry point that took a `Point[]` now also takes
+  `{ outline, holes }`, so a room can have a desk in the middle of it. A bare array is
+  still a region with no holes, so existing calls are unchanged. `buildNavMesh` returns
+  `holes` and `region` alongside `polygon`, which still holds the outline. Holes are
+  bridged into the outline before ear clipping (Eberly's method), sorted deterministically
+  so the same input always produces the same mesh. New error codes `HOLE_OUTSIDE_OUTLINE`,
+  `HOLE_INTERSECTS_OUTLINE`, `HOLE_TOUCHES_OUTLINE` and `HOLE_OVERLAP`; a hole that so
+  much as touches another ring is rejected rather than silently joined.
+- **`isWalkable(mesh, p)` and `clampToWalkable(mesh, p, { inset })`.** With holes in play,
+  "inside the outline" and "somewhere the character can stand" stop being the same
+  question. `clampToWalkable` pushes a point out of a hole and off the walls in one call.
+  `pointInPolygon` is unchanged and still answers only about the single ring you give it.
+- **`validateRegion(region, opts?)`**, and validation errors that say *where*. Every error
+  now carries `ring` (`'outline' | 'hole'`) and, for holes, `ringIndex`; plus `index`,
+  `edges: [i, j]` for a self-intersection, and `at` — the point where it actually goes
+  wrong. `ring` and `ringIndex` are separate fields on purpose: hole `0` is a real hole, so
+  a single merged field would read as falsy for the first one. Both validators accept
+  `{ all: true }` to collect every fault rather than stopping at the first of each kind.
+- **`clearance` and `includeClearance` on `findPath` / `pathfind`.** Keeps the path off
+  the scenery so a character with a body does not clip it: A* refuses portals narrower than
+  `2 × clearance`, each corner the path turns is offset along its interior bisector far
+  enough that both walls stay clear, and the destination is pulled inside. The start is
+  not moved — an actor already against a wall stays where it is. A route too tight for the
+  requested clearance fails as `NO_PATH` rather than returning a clipping path.
+  `includeClearance: true` adds a `clearances` array, one measured distance per waypoint.
+  The guarantee is local: it constrains the corners and the runs between them, not every
+  point on the path, and a path with clearance is no longer the shortest one.
+- **`triangulateRegion(region)`** (`path-of-least-regret/triangulate`), which returns
+  `{ ok, tris }` or `{ ok: false, message }` instead of silently handing back a partial
+  mesh. `buildNavMesh` uses it and reports `TRIANGULATION_FAILED`. `triangulate()` itself
+  is unchanged, partial returns and all, because it is a published export.
+- The demo gained obstacles — add, drag, right-click to remove — and a clearance control.
+  The README gained sections on obstacles, walkability, clearance, validation diagnostics,
+  the winding convention, and an explicit list of what this library deliberately does not
+  do (no 3D or z-levels, no weighted regions, no serialised meshes).
 - **Facing helper** (`path-of-least-regret/facing`). Turns a movement vector into one of 4,
   8 or 16 compass directions so an integrator can pick a sprite row: `facingFromVector`,
   `facingFromPoints`, `bearingOf`, the `DIRECTION_SETS` presets, and `createFacingTracker`,
@@ -32,6 +67,27 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/en/1.0.0
   perspective-speed controls.
 - The README gains an "Integrator helpers" section documenting each helper with worked
   examples, plus a combined game-loop example wiring all three together.
+
+### Fixed
+
+- **`pointInTri` accepted points far outside the triangle.** The edge-inclusive test
+  treated a near-zero signed area as "on the edge", which is true of any point collinear
+  with an edge's *line*, however distant. Without holes this was mostly invisible; with
+  them, the middle of a desk reported as walkable. Now a point must not be on opposite
+  sides of two edges. All previously passing tests still pass.
+- **`updatePolygon` reported a change every time when holes were involved.** It compared
+  the caller's raw geometry against the normalised copy in the mesh, which differ by
+  winding. It now normalises both first, which also makes re-submitting the same outline
+  wound the other way correctly report `changed: false`.
+
+### Changed
+
+- `ErrorCode` gained five members. Additive for every normal use, but a `switch` over it
+  with an exhaustive `never` guard will now fail to compile until the new cases are
+  handled.
+- `Mesh` gained required `holes` and `region` fields. Anything constructing a `Mesh`
+  literal rather than calling `buildNavMesh` will need them; nothing that only consumes
+  meshes is affected.
 
 ## [0.2.0] - 2026-08-04
 

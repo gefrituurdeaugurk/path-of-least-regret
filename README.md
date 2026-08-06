@@ -3,9 +3,10 @@ Path Of Least Regret — NavMesh Pathfinding
 
 Lightweight 2D polygon navmesh pathfinding: ear-clipping triangulation, A* across triangle
 adjacency, and a robust funnel (string pulling) that produces a smooth path — the kind of
-movement you see in 2D point-'n-click adventure games. Plus the two helpers that make a
-character look right on top of it: which of N directions it is facing, and how big it
-should be drawn at a given depth.
+movement you see in 2D point-'n-click adventure games. Rooms can have obstacles cut out of
+them, and paths can be asked to keep their distance from the scenery. Plus the two helpers
+that make a character look right on top of it: which of N directions it is facing, and how
+big it should be drawn at a given depth.
 
 No runtime dependencies. Ships ESM, CommonJS and TypeScript definitions.
 
@@ -62,24 +63,78 @@ const { pathfind } = require('path-of-least-regret');
 API
 ---
 
-buildNavMesh(polygon, opts?) → Mesh
+buildNavMesh(region, opts?) → Mesh
 -----------------------------------
 
-Validates and triangulates `polygon`, then builds the triangle adjacency graph.
+Validates and triangulates `region`, then builds the triangle adjacency graph.
 
-The polygon is deep-copied, so mutating your own point objects afterwards cannot corrupt
+`region` is either a bare `Point[]` outline, or `{ outline, holes }` when the room has
+things standing in it. See [Obstacles](#obstacles) below.
+
+The geometry is deep-copied, so mutating your own point objects afterwards cannot corrupt
 the mesh. Winding is normalised internally.
 
-Returns `{ polygon, tris, adj, centroids }`:
+Returns `{ polygon, holes, region, tris, adj, centroids }`:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `polygon` | `Point[]` | the normalised (CCW) copy of your polygon |
+| `polygon` | `Point[]` | the normalised (CCW) copy of the outline |
+| `holes` | `Point[][]` | the normalised (CW) copies of the holes; `[]` when there are none |
+| `region` | `{ outline, holes }` | both of the above together, the form the helpers take |
 | `tris` | `Triangle[]` | triangles, each a `[Point, Point, Point]` tuple |
 | `adj` | `Map<number, {to, edge}[]>` | adjacency keyed by triangle index |
 | `centroids` | `Point[]` | cached triangle centroids, used by the A* heuristic |
 
 With `includeDebug: true` a `debug: { tris, adj }` field is added.
+
+Obstacles
+---------
+
+A region is an outline with holes cut out of it: a reception desk in the middle of a
+lobby, a table you have to walk round, a pillar.
+
+```js
+import { buildNavMesh, findPath } from 'path-of-least-regret';
+
+const lobby = {
+  outline: [{ x: 0, y: 0 }, { x: 400, y: 0 }, { x: 400, y: 400 }, { x: 0, y: 400 }],
+  holes: [
+    [{ x: 150, y: 150 }, { x: 250, y: 150 }, { x: 250, y: 250 }, { x: 150, y: 250 }]
+  ]
+};
+
+const mesh = buildNavMesh(lobby);
+findPath(mesh, { x: 50, y: 200 }, { x: 350, y: 200 }).path;
+// [{x:50,y:200}, {x:150,y:150}, {x:250,y:150}, {x:350,y:200}] — round the desk, not through it
+```
+
+Either winding works for any ring; the library normalises the outline to counter-clockwise
+and every hole to clockwise. Holes must lie strictly inside the outline, must not overlap
+each other, and must not touch either — a hole sharing so much as one point with another
+ring is rejected rather than silently joined. Every entry point that took a `Point[]`
+still does: a bare array is simply a region with no holes.
+
+Walkable or not
+---------------
+
+Holes make "is this point in the room?" and "can the character stand here?" different
+questions, so there are two answers:
+
+| Call | Question | Holes |
+| --- | --- | --- |
+| `isWalkable(mesh, p)` | is `p` on the navmesh? | excluded — the desk is not walkable |
+| `clampToWalkable(mesh, p, { inset })` | nearest place it *can* stand | pushed out of holes and off walls |
+| `pointInRegion(p, region)` | is `p` inside the outline and outside every hole? | excluded |
+| `pointInPolygon(p, poly)` | is `p` inside this one ring? | not considered — it takes a single ring |
+| `distanceToRegionBoundary(p, region)` | how much room is there? | hole edges count as walls |
+
+`pointInPolygon` is unchanged from earlier versions and still answers only about the ring
+you hand it. Use `isWalkable` for the question a click on the scene is really asking.
+
+```js
+isWalkable(mesh, { x: 200, y: 200 });                  // false — that is the desk
+clampToWalkable(mesh, { x: 200, y: 160 }, { inset: 2 }); // { x: 200, y: 148 } — beside it
+```
 
 findPath(mesh, start, end, opts?) → PathResult
 ----------------------------------------------
@@ -91,21 +146,57 @@ Returns `{ ok: true, path, triPath, portals }`:
 | `path` | `Point[]` | waypoints from `start` to `end`, no duplicate consecutive points |
 | `triPath` | `number[]` | triangle indices traversed |
 | `portals` | `Portal[]` | `{ left, right }` pairs crossed, useful for visualisation |
+| `clearances` | `number[]` | room available at each waypoint, only with `includeClearance` |
 
 `triPath` and `portals` are always returned; there is no need to opt in.
 
-pathfind(polygon, start, end, opts?) → PathResult
+Clearance — keeping the actor off the walls
+-------------------------------------------
+
+A funnelled path is the shortest one, which means it touches every corner it turns. A
+character with a body then clips the scenery. `clearance` asks for a path that keeps its
+distance:
+
+```js
+findPath(mesh, start, end, { clearance: 20 }).path;
+// [{x:50,y:200}, {x:130,y:130}, {x:270,y:130}, {x:350,y:200}] — 20 clear of the desk
+```
+
+Three things happen, and it is worth knowing which:
+
+- A* refuses to cross a shared triangle edge narrower than `2 × clearance`, so a corridor
+  the character cannot fit through fails as `NO_PATH` rather than producing a path that
+  clips. This is the check that makes a too-wide request fail cleanly instead of hanging.
+- Each corner the path turns is moved along the interior bisector of that corner, far
+  enough that both walls meeting there stay `clearance` away. Offsetting the corner only
+  as far as the nearest wall is not enough: the straight run between two such corners
+  would pass closer to the wall between them than either corner did.
+- The destination is pulled at least `clearance` inside. The **start is not** — an actor
+  already standing against a wall must not be teleported off it.
+
+The result is local and approximate. It constrains the corners the path turns and the runs
+between them, which is what actually clips in practice; it is not a proven lower bound on
+the distance from every point of the path to every wall. A path with `clearance` is no
+longer the shortest path. Pass `includeClearance: true` to get the measured room at each
+waypoint back in `clearances` and decide for yourself.
+
+`clearance: 0` (the default) is byte-for-byte the old behaviour.
+
+pathfind(region, start, end, opts?) → PathResult
 --------------------------------------------------
 
 Convenience wrapper: builds a mesh and paths through it in one call. Accepts every option
 of both. Rebuilds the mesh on every call, so prefer `buildNavMesh` + `findPath` in a loop.
 
-updatePolygon(mesh, newPoly, opts?) → { changed, mesh, error? }
+updatePolygon(mesh, newRegion, opts?) → { changed, mesh, error? }
 -----------------------------------------------------------------
 
-Rebuilds `mesh` **in place** only when `newPoly` differs from its current polygon — useful
-when a polygon editor fires on every mouse move. If the new polygon is rejected in
-`errorMode: 'code'`, the mesh is left untouched and the failure comes back as `error`.
+Rebuilds `mesh` **in place** only when `newRegion` differs from its current region —
+useful when a room editor fires on every mouse move. The comparison normalises first, so
+re-submitting the same geometry wound the other way is correctly reported as no change. If
+the new region is rejected in `errorMode: 'code'`, the mesh is left untouched and the
+failure comes back as `error`.
+
 
 Integrator helpers
 ------------------
@@ -338,13 +429,20 @@ Options
 | `smooth` | `boolean \| number` | `false` | `findPath`, `pathfind` |
 | `smoothIterations` | `number` | `1` | `findPath`, `pathfind` |
 | `snapNudge` | `number` | `0.5` | `findPath`, `pathfind` |
+| `clearance` | `number` | `0` | `findPath`, `pathfind` |
+| `includeClearance` | `boolean` | `false` | `findPath`, `pathfind` |
 
 - **`smooth`** — `true` runs one Chaikin iteration; a number runs that many (clamped to
   1..5). `smoothIterations` is the explicit form used when `smooth` is a boolean.
   Smoothing rounds corners, so a smoothed path may clip the inside of a tight bend.
-- **`snapNudge`** — an endpoint lying within this distance of the outline is pulled that
-  far inward, along the inward normal of the nearest edge. Endpoints further inside are
-  left exactly where you put them. Set to `0` to disable.
+- **`snapNudge`** — an endpoint lying within this distance of a wall is pulled that far
+  inward, along the inward normal of the nearest edge. Hole edges are walls too. Endpoints
+  further inside are left exactly where you put them. Set to `0` to disable.
+- **`clearance`** — how much room to leave between the path and the scenery. See
+  [Clearance](#clearance--keeping-the-actor-off-the-walls) for what it does and does not
+  guarantee.
+- **`includeClearance`** — adds a `clearances` array to the result, one measured distance
+  per waypoint.
 
 Errors
 ------
@@ -357,9 +455,14 @@ failures). With `errorMode: 'code'` the same information is returned as
 | --- | --- |
 | `NOT_ENOUGH_VERTICES` | fewer than 3 vertices |
 | `DUPLICATE_ADJACENT_VERTEX` | a zero-length edge |
-| `SELF_INTERSECTION` | the polygon crosses itself |
+| `SELF_INTERSECTION` | a ring crosses itself |
+| `HOLE_OUTSIDE_OUTLINE` | a hole is not inside the outline |
+| `HOLE_INTERSECTS_OUTLINE` | a hole crosses the outline |
+| `HOLE_TOUCHES_OUTLINE` | a hole meets the outline without crossing it |
+| `HOLE_OVERLAP` | two holes overlap, touch, or one contains the other |
+| `TRIANGULATION_FAILED` | the region validated but could not be meshed |
 | `OUTSIDE_POLY` | `start` or `end` is outside the mesh (see `where`) |
-| `NO_PATH` | no route exists between the two triangles |
+| `NO_PATH` | no route exists between the two triangles, or none wide enough for `clearance` |
 | `NO_LAYERS` | a horizon set was given no layers |
 | `NOT_ENOUGH_HORIZONS` | a horizon layer needs at least two horizons |
 | `INVALID_HORIZON` | a horizon has no finite `scale`, no `y` or points, or is vertical (see `index`) |
@@ -370,8 +473,41 @@ const res = pathfind(room, start, end, { errorMode: 'code' });
 if (!res.ok) console.warn(res.code, res.where);
 ```
 
-Set `validate: false` to skip validation when you know the polygon is well formed;
-triangulating a self-intersecting polygon produces a meaningless mesh rather than an error.
+Where the geometry is wrong
+---------------------------
+
+Validation errors say *where*, which is the difference between "your room is broken" and a
+marker an editor can put on the canvas:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `code` | `string` | one of the codes above |
+| `message` | `string` | human-readable summary |
+| `ring` | `'outline' \| 'hole'` | which ring is at fault |
+| `ringIndex` | `number?` | which hole, when `ring` is `'hole'` |
+| `index` | `number?` | the vertex or first edge involved |
+| `edges` | `[number, number]?` | the two edges that cross, for `SELF_INTERSECTION` |
+| `at` | `Point?` | where it happens — the crossing point, or the offending vertex |
+
+```js
+import { validateRegion } from 'path-of-least-regret';
+
+for (const e of validateRegion(room)) {
+  const which = e.ring === 'hole' ? `hole ${e.ringIndex}` : 'outline';
+  console.warn(`${which}: ${e.message}`, e.at);
+}
+```
+
+`ring` and `ringIndex` are separate on purpose: `ringIndex` of `0` is a real hole, so a
+single field mixing the two would read as falsy for the first one.
+
+Both validators take `{ all: true }` to collect every fault instead of stopping at the
+first of each kind — more useful for an editor, slower for a hot path.
+
+Set `validate: false` to skip validation when you know the region is well formed;
+triangulating a self-intersecting polygon produces a meaningless mesh rather than an
+error. Validation is what catches that — the triangulator only reports the regions it
+cannot cover at all, as `TRIANGULATION_FAILED`.
 
 Subpath exports
 ---------------
@@ -379,14 +515,14 @@ Subpath exports
 The internals are importable directly if you want the pieces rather than the API:
 
 ```js
-import { V, triArea2 }      from 'path-of-least-regret/math';
-import { triangulate }      from 'path-of-least-regret/triangulate';
-import { funnel }           from 'path-of-least-regret/navmesh';
-import { nudgeInside }      from 'path-of-least-regret/helpers';
-import { validatePolygon }  from 'path-of-least-regret/validate';
-import { facingFromVector } from 'path-of-least-regret/facing';
-import { createHorizonSet } from 'path-of-least-regret/horizon';
-import { createMover }      from 'path-of-least-regret/movement';
+import { V, triArea2 }       from 'path-of-least-regret/math';
+import { triangulateRegion } from 'path-of-least-regret/triangulate';
+import { funnel }            from 'path-of-least-regret/navmesh';
+import { nudgeInside }       from 'path-of-least-regret/helpers';
+import { validateRegion }    from 'path-of-least-regret/validate';
+import { facingFromVector }  from 'path-of-least-regret/facing';
+import { createHorizonSet }  from 'path-of-least-regret/horizon';
+import { createMover }       from 'path-of-least-regret/movement';
 ```
 
 Each subpath resolves for `import` and `require` alike and carries its own `.d.ts`.
@@ -397,16 +533,36 @@ Coordinate system
 Pixels in a canvas-style Y-down layout. Flip Y if your world is Y-up; nothing in the
 library assumes a particular scale.
 
+Internally the outline is stored counter-clockwise and every hole clockwise. Under that
+convention the left normal of any ring edge points into the walkable area for every ring,
+which is why "step in off a wall" and "step away from an obstacle" are the same operation.
+You never have to arrange this yourself — hand rings over in whatever winding you have.
+
+What this library does not do
+-----------------------------
+
+Deliberately absent, so nobody goes looking:
+
+- **No 3D and no z-levels.** This is a flat 2D navmesh. Model a staircase as two regions
+  and switch between them; the horizon helpers exist to make that look right.
+- **No weighted or cost regions.** Every triangle costs its distance and nothing else.
+- **No multiple disconnected regions with explicit links.** One outline, one connected
+  walkable area, per mesh.
+- **No precomputed or serialised meshes.** Building one is fast; keep the source geometry
+  as your saved format.
+- **No rendering and no DOM.** The demo draws; the library only computes.
+
 Repository layout
 -----------------
 
 ```text
 lib/                – the library (no UI)
  math.js            – vector & geometry primitives
- triangulate.js     – ear-clipping polygon triangulation
+ triangulate.js     – ear-clipping triangulation, hole bridging
  navmesh.js         – adjacency, A*, portals, funnel, centroids
  helpers.js         – centroid, point-in-polygon, nudgeInside, closest point
- validate.js        – polygon validation
+ region.js          – outline + holes: winding, containment, distance, corner offsets
+ validate.js        – polygon and region validation
  facing.js          – movement vector -> compass direction
  horizon.js         – horizon layers -> character scale
  movement.js        – path -> position, speed, easing, perspective
@@ -432,6 +588,11 @@ Open `index.html` in a modern browser. If your browser blocks module scripts loa
 ```bash
 npx serve .
 ```
+
+Draw a room and close it, then **Add obstacle** to cut something out of it. Obstacles drag
+around and right-click removes them; one dragged somewhere that would break the region
+snaps back. In Play mode the **Clearance** box is passed straight to `findPath`, so you
+can watch the path pull away from the walls as you raise it.
 
 **Edit mode** — click to add vertices; click the first vertex to close the polygon (3+
 points); drag vertices to move them; click an edge to select it, then press `=` to split

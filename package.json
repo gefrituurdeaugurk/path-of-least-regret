@@ -1,6 +1,6 @@
 {
   "name": "path-of-least-regret",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "Lightweight 2D polygon navmesh pathfinding: triangulation + A* + funnel + smoothing.",
   "license": "MIT",
   "author": {

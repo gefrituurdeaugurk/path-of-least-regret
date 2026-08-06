@@ -3,6 +3,7 @@ import {
     buildNavMesh,
     updatePolygon,
     findPath,
+    clampToWalkable,
     V,
     ErrorCodes
 } from '../lib/api.js';
@@ -12,7 +13,8 @@ import {
 import {
     polyCentroid,
     nudgeInside,
-    closestPointOnBoundary
+    closestPointOnBoundary,
+    pointInPolygon
 } from '../lib/helpers.js';
 import {
     createFacingTracker
@@ -26,6 +28,7 @@ import {
 import {
     drawGround,
     drawEdit,
+    drawObstacles,
     drawNavmesh,
     drawPortals,
     drawPath,
@@ -44,8 +47,11 @@ const UI = {
     showWaypoints: document.getElementById('toggleWaypoints'),
     optSmooth: document.getElementById('optSmooth'),
     optSmoothIter: document.getElementById('optSmoothIter'),
+    optClearance: document.getElementById('optClearance'),
     optDebug: document.getElementById('optDebug'),
     randomBtn: document.getElementById('randomBtn'),
+    obstacleBtn: document.getElementById('obstacleBtn'),
+    clearObstaclesBtn: document.getElementById('clearObstaclesBtn'),
     dirCount: document.getElementById('dirCount'),
     dirHysteresis: document.getElementById('dirHysteresis'),
     horizonLayer: document.getElementById('horizonLayer'),
@@ -62,11 +68,15 @@ const UI = {
 
 let mode = 'edit';
 let poly = [];
+let holes = [];
 let closed = false;
 let hoverIndex = -1,
     draggingIndex = -1,
     hoverEdgeIndex = -1,
     selectedEdgeIndex = -1;
+let hoverHoleIndex = -1,
+    draggingHoleIndex = -1,
+    holeGrabOffset = { x: 0, y: 0 };
 const SNAP_R = 10,
     EDGE_SNAP = 8;
 let mesh = null; // library mesh object
@@ -163,6 +173,9 @@ const BUILD_OPTS = {
     errorMode: 'code'
 };
 
+/** What the library is asked to mesh: the outline plus whatever is cut out of it. */
+const region = () => ({ outline: poly, holes });
+
 function rebuild() {
     if (!closed || poly.length < 3) {
         mesh = null;
@@ -171,21 +184,78 @@ function rebuild() {
     }
     if (mesh) {
         // Diff-based rebuild: skips the work entirely when nothing moved.
-        const res = updatePolygon(mesh, poly, BUILD_OPTS);
+        const res = updatePolygon(mesh, region(), BUILD_OPTS);
         if (res.error) {
-            showError(res.error.code);
+            showError(describe(res.error));
             return;
         }
     } else {
-        const m = buildNavMesh(poly, BUILD_OPTS);
+        const m = buildNavMesh(region(), BUILD_OPTS);
         if (m.ok === false) {
-            showError(m.code);
+            showError(describe(m));
             return;
         }
         mesh = m;
     }
     triangles = mesh.tris;
     clearError();
+}
+
+/** Validation errors know which ring they came from; saying so saves a lot of squinting. */
+function describe(err) {
+    const where = err.ring === 'hole' ? ` (obstacle ${err.ringIndex + 1})` : '';
+    return `${err.code}${where}`;
+}
+
+const OBSTACLE_SIZE = 70;
+
+/** Places a square obstacle somewhere it does not break the mesh, or reports why not. */
+function addObstacle() {
+    if (!closed || !mesh) {
+        showError('Close the shape first');
+        return;
+    }
+    const c = polyCentroid(poly);
+    const half = OBSTACLE_SIZE / 2;
+    const spiral = [[0, 0], [1, 0], [0, 1], [-1, 0], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
+    const before = holes;
+    for (const [dx, dy] of spiral) {
+        for (const spread of [1, 2, 3]) {
+            const cx = c.x + dx * OBSTACLE_SIZE * 1.6 * spread;
+            const cy = c.y + dy * OBSTACLE_SIZE * 1.6 * spread;
+            const square = [
+                { x: cx - half, y: cy - half },
+                { x: cx + half, y: cy - half },
+                { x: cx + half, y: cy + half },
+                { x: cx - half, y: cy + half }
+            ];
+            holes = [...before, square];
+            const probe = buildNavMesh(region(), BUILD_OPTS);
+            if (probe.ok !== false) {
+                mesh = probe;
+                triangles = mesh.tris;
+                clearError();
+                return;
+            }
+        }
+    }
+    holes = before;
+    showError('No room for another obstacle');
+}
+
+function findHoleNear(p) {
+    // Last drawn is topmost, so search back to front.
+    for (let i = holes.length - 1; i >= 0; i--) {
+        if (pointInPolygon(p, holes[i])) return i;
+    }
+    return -1;
+}
+
+function moveHole(i, cx, cy) {
+    const c = polyCentroid(holes[i]);
+    const dx = cx - c.x;
+    const dy = cy - c.y;
+    holes[i] = holes[i].map((p) => ({ x: p.x + dx, y: p.y + dy }));
 }
 
 function findVertexNear(p) {
@@ -248,8 +318,9 @@ function toCanvas(e) {
 
 function moveTo(target) {
     if (!closed || !triangles.length) return;
-    const goalInside = findTriIdContaining(target, triangles) != null;
-    const goal = goalInside ? target : nudgeInside(closestPointOnBoundary(target, poly), poly, 0.75);
+    // clampToWalkable knows about obstacles, so a click on a crate lands beside it
+    // rather than being dragged to the nearest outside wall.
+    const goal = clampToWalkable(mesh, target, { inset: 0.75 });
     let startPt = {
         x: actor.pos.x,
         y: actor.pos.y
@@ -266,13 +337,19 @@ function moveTo(target) {
     let smoothIterations = parseInt(UI.optSmoothIter?.value || '1', 10);
     if (isNaN(smoothIterations) || smoothIterations < 1) smoothIterations = 1;
     if (smoothIterations > 5) smoothIterations = 5;
+    let clearance = parseFloat(UI.optClearance?.value || '0');
+    if (isNaN(clearance) || clearance < 0) clearance = 0;
     const result = findPath(mesh, startPt, goal, {
         smooth: smoothEnabled,
         smoothIterations,
+        clearance,
         errorMode: 'code'
     });
     if (result.ok === false) {
-        showError(result.code === ErrorCodes.OUTSIDE_POLY ? 'Target is outside the shape' : result.code);
+        if (result.code === ErrorCodes.OUTSIDE_POLY) showError('Target is outside the shape');
+        else if (result.code === ErrorCodes.NO_PATH && clearance > 0) {
+            showError(`No route that wide \u2014 try a clearance under ${clearance}`);
+        } else showError(result.code);
         return;
     }
     clearError();
@@ -301,10 +378,26 @@ canvas.addEventListener('mousemove', e => {
         hoverHorizonIndex = -1;
     }
     if (mode === 'edit') {
+        if (draggingHoleIndex >= 0 && e.buttons === 0) draggingHoleIndex = -1;
+        if (draggingHoleIndex >= 0 && mesh) {
+            const kept = holes[draggingHoleIndex];
+            moveHole(draggingHoleIndex, p.x - holeGrabOffset.x, p.y - holeGrabOffset.y);
+            const res = updatePolygon(mesh, region(), BUILD_OPTS);
+            if (res.error) {
+                // Dragged through a wall or another obstacle: leave it where it still worked.
+                holes[draggingHoleIndex] = kept;
+                showError(describe(res.error));
+            } else {
+                triangles = mesh.tris;
+                clearError();
+            }
+            return;
+        }
         if (draggingIndex >= 0) {
             poly[draggingIndex] = p;
             if (closed) rebuild();
         } else {
+            hoverHoleIndex = findHoleNear(p);
             hoverIndex = findVertexNear(p);
             if (hoverIndex < 0 && poly.length > 1) {
                 hoverEdgeIndex = -1;
@@ -333,11 +426,29 @@ canvas.addEventListener('mousedown', e => {
         selectedEdgeIndex = -1;
         return;
     }
+    const hole = findHoleNear(p);
+    if (hole >= 0) {
+        draggingHoleIndex = hole;
+        const c = polyCentroid(holes[hole]);
+        holeGrabOffset = { x: p.x - c.x, y: p.y - c.y };
+        selectedEdgeIndex = -1;
+        return;
+    }
     if (closed && hoverEdgeIndex >= 0) selectedEdgeIndex = hoverEdgeIndex;
 });
 window.addEventListener('mouseup', () => {
     if (draggingIndex >= 0) draggingIndex = -1;
+    if (draggingHoleIndex >= 0) draggingHoleIndex = -1;
     if (draggingHorizonIndex >= 0) draggingHorizonIndex = -1;
+});
+canvas.addEventListener('contextmenu', e => {
+    if (mode !== 'edit') return;
+    const hole = findHoleNear(toCanvas(e));
+    if (hole < 0) return;
+    e.preventDefault();
+    holes.splice(hole, 1);
+    hoverHoleIndex = -1;
+    rebuild();
 });
 canvas.addEventListener('mouseleave', () => {
     hoverHorizonIndex = -1;
@@ -405,6 +516,7 @@ window.addEventListener('keydown', e => {
 
 UI.resetBtn.addEventListener('click', () => {
     poly = [];
+    holes = [];
     closed = false;
     triangles = [];
     mesh = null;
@@ -415,6 +527,16 @@ UI.resetBtn.addEventListener('click', () => {
     hoverIndex = -1;
     hoverEdgeIndex = -1;
     selectedEdgeIndex = -1;
+    hoverHoleIndex = -1;
+    draggingHoleIndex = -1;
+});
+UI.obstacleBtn.addEventListener('click', addObstacle);
+UI.clearObstaclesBtn.addEventListener('click', () => {
+    if (!holes.length) return;
+    holes = [];
+    hoverHoleIndex = -1;
+    draggingHoleIndex = -1;
+    rebuild();
 });
 UI.editBtn.addEventListener('click', () => setMode('edit'));
 UI.playBtn.addEventListener('click', () => {
@@ -488,8 +610,9 @@ function render() {
     if (mode === 'edit') drawEdit(ctx, poly, closed, hoverEdgeIndex, selectedEdgeIndex, hoverIndex, UI);
     else UI.hint.textContent = horizonEditing()
         ? 'Drag a dashed horizon line to move it; click elsewhere to walk there.'
-        : 'Play: click inside to walk there. The panel shows the facing and scale the helpers report.';
+        : 'Play: click inside to walk there. Clearance keeps the actor off the walls and obstacles.';
     drawNavmesh(ctx, UI.showMesh.checked, triangles);
+    drawObstacles(ctx, holes, mode === 'edit' ? hoverHoleIndex : -1);
     drawPath(ctx, actor, UI.showWaypoints.checked);
     drawPortals(ctx, UI.showPortals.checked && UI.optDebug?.checked, lastPortals);
     drawActor(ctx, actor);
