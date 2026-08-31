@@ -8,6 +8,8 @@ The format is inspired by [Keep a Changelog](https://keepachangelog.com/en/1.0.0
 
 ### Added
 
+- Published [path-of-least-regret@0.3.0](https://www.npmjs.com/package/path-of-least-regret)
+  to npm.
 - **Obstacles (holes).** Every entry point that took a `Point[]` now also takes
   `{ outline, holes }`, so a room can have a desk in the middle of it. A bare array is
   still a region with no holes, so existing calls are unchanged. `buildNavMesh` returns
