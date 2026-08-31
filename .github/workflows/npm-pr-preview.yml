@@ -103,7 +103,21 @@ jobs:
         run: |
           node --input-type=module -e "import fs from 'node:fs'; const pkg = JSON.parse(fs.readFileSync('package.json', 'utf8')); pkg.name = '@' + process.env.GITHUB_REPOSITORY; fs.writeFileSync('package.json', JSON.stringify(pkg, null, 2) + '\\n');"
 
+      - name: Check whether package version exists
+        id: github-package-version
+        run: |
+          PACKAGE_NAME="@${GITHUB_REPOSITORY}"
+          PACKAGE_VERSION=$(node -p "require('./package.json').version")
+          if npm view "${PACKAGE_NAME}@${PACKAGE_VERSION}" version --registry=https://npm.pkg.github.com >/dev/null 2>&1; then
+            echo "published=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "published=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Publish stable release to GitHub Packages
+        if: steps.github-package-version.outputs.published != 'true'
         run: npm publish --registry=https://npm.pkg.github.com
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
